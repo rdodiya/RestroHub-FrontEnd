@@ -6,10 +6,12 @@ import PublicLayout from '../layouts/PublicLayout';
 import CustomerLayout from '../layouts/CustomerLayout';
 import AdminLayout from '../layouts/AdminLayout';
 import ProtectedRoute from './ProtectedRoute';
+import { AuthProvider } from '@context/AuthContext';
 
 // Public Pages
-import Landing from '../pages/public/Landing';
-import Login from '../pages/public/Login';
+import Landing from '@pages/public/Landing';
+import Login from '@pages/public/Login';
+import Unauthorized from '@pages/public/Unauthorized';
 
 // Customer Pages
 import RestaurantMenu from '../pages/customer/RestaurantMenu';
@@ -27,42 +29,51 @@ import Profile from '@components/admin/profile/Profile';
 
 const AppRoutes = () => {
   return (
-    <Routes>
-      {/* ========== PUBLIC ROUTES ========== */}
-      <Route element={<PublicLayout />}>
-        <Route path="/" element={<Landing />} />
-        <Route path="/login" element={<Login />} />
-      </Route>
+    <AuthProvider>
+      <Routes>
 
-      {/* ========== CUSTOMER ROUTES ========== */}
-      <Route element={<CustomerLayout />}>
+        {/* ========= PUBLIC ROUTES ========= */}
+        <Route element={<PublicLayout />}>
+          <Route path="/" element={<Landing />} />
+          <Route path="/login" element={<Login />} />
+          <Route path="/unauthorized" element={<Unauthorized />} />
+        </Route>
+
+        {/* ========= CUSTOMER ROUTES ========= */}
+        <Route element={<CustomerLayout />}>
+          <Route
+            path="/Restrohub/:restaurantName/:branchId"
+            element={<RestaurantMenu />}
+          />
+        </Route>
+
+        {/* ========= ADMIN ROUTES (ADMIN ONLY) ========= */}
         <Route
-          path="/Restrohub/:restaurantName/:branchId"
-          element={<RestaurantMenu />}
-        />
-      </Route>
+          path="/admin"
+          element={
+            <ProtectedRoute allowedRoles={["ADMIN"]}>
+              <AdminLayout />
+            </ProtectedRoute>
+          }
+        >
+          <Route index element={<Navigate to="/admin/dashboard" replace />} />
 
-      {/* ========== ADMIN ROUTES ========== */}
-      <Route path="/admin" 
-            element={
-                  <ProtectedRoute>
-                    <AdminLayout />
-                    </ProtectedRoute>}>
-        <Route index element={<Navigate to="/admin/dashboard" replace />} />
-        <Route path="dashboard" element={<Dashboard />} />
-        <Route path="menus" element={<Menus />} />
-        <Route path="orders" element={<Orders />} />
-        <Route path="store/branches" element={<Branches />} />
-        <Route path="store/branches/:branchId/tables" element={<Tables />} />
-        <Route path="marketing/website" element={<Website />} />
-        <Route path="marketing/qr-display" element={<QRDisplay />} />
-        <Route path="upi-links" element={<UPILinks />} />
-        <Route path="profile" element={<Profile />} />
-      </Route>
+          <Route path="dashboard" element={<Dashboard />} />
+          <Route path="menus" element={<Menus />} />
+          <Route path="orders" element={<Orders />} />
+          <Route path="store/branches" element={<Branches />} />
+          <Route path="store/branches/:branchId/tables" element={<Tables />} />
+          <Route path="marketing/website" element={<Website />} />
+          <Route path="marketing/qr-display" element={<QRDisplay />} />
+          <Route path="upi-links" element={<UPILinks />} />
+          <Route path="profile" element={<Profile />} />
+        </Route>
 
-      {/* ========== 404 FALLBACK ========== */}
-      <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
+        {/* ========= 404 ========= */}
+        <Route path="*" element={<Navigate to="/" replace />} />
+
+      </Routes>
+    </AuthProvider>
   );
 };
 

@@ -20,7 +20,9 @@ export default defineConfig({
       '@context': path.resolve(__dirname, './src/context'),
       '@services': path.resolve(__dirname, './src/services'),
       '@data': path.resolve(__dirname, './src/data'),
-      '@styles': path.resolve(__dirname, './src/styles')
+      '@styles': path.resolve(__dirname, './src/styles'),
+      '@pages': path.resolve(__dirname, './src/pages')
+
     }
   }
 });

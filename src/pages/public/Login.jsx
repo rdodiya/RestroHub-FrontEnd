@@ -1,18 +1,15 @@
-// src/pages/public/Login.jsx
-
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useLocation, Navigate } from "react-router-dom";
 import { useFormik } from "formik";
 import * as Yup from "yup";
-import axios from "axios";
 import toast from "react-hot-toast";
-import api from "@services/common/api";
+import { useAuth } from "@context/AuthContext"; // ✅ Use AuthContext
 
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/api";
 
 const validationSchema = Yup.object({
-    username: Yup.string().required("Email or username is required"),
+  username: Yup.string().required("Email or username is required"),
   password: Yup.string()
     .min(6, "Password must be at least 6 characters")
     .required("Password is required"),
@@ -57,15 +54,6 @@ const EyeOffIcon = () => (
   </svg>
 );
 
-const GoogleIcon = () => (
-  <svg width="20" height="20" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
-    <path d="M20 10.22c.01-.69-.06-1.37-.22-2.04H10.2v3.71h5.63a4.8 4.8 0 0 1-2.09 3.15l3.03 2.3C18.89 15.83 20 13.27 20 10.22Z" fill="#4285F4" />
-    <path d="M10.21 20c2.75 0 5.07-.89 6.76-2.42l-3.22-2.45a6.12 6.12 0 0 1-9.35-3.16l-3.27 2.4A10.2 10.2 0 0 0 10.21 20Z" fill="#34A853" />
-    <path d="M4.4 11.98A6.1 6.1 0 0 1 4.06 10c0-.69.12-1.36.33-1.98L1.13 5.63A10.01 10.01 0 0 0 0 10c0 1.56.37 3.1 1.09 4.49l3.31-2.51Z" fill="#FBBC05" />
-    <path d="M10.21 3.87c1.46-.02 2.87.49 3.94 1.43l2.88-2.76A10.2 10.2 0 0 0 10.21 0 10.2 10.2 0 0 0 1.09 5.51l3.3 2.51a6.1 6.1 0 0 1 5.82-4.15Z" fill="#EB4335" />
-  </svg>
-);
-
 const SpinnerIcon = () => (
   <svg
     className="h-5 w-5 animate-spin text-white"
@@ -73,7 +61,14 @@ const SpinnerIcon = () => (
     fill="none"
     viewBox="0 0 24 24"
   >
-    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+    <circle
+      className="opacity-25"
+      cx="12"
+      cy="12"
+      r="10"
+      stroke="currentColor"
+      strokeWidth="4"
+    />
     <path
       className="opacity-75"
       fill="currentColor"
@@ -92,12 +87,17 @@ const Illustration = () => (
     fill="none"
     xmlns="http://www.w3.org/2000/svg"
   >
-    {/* Plate */}
     <ellipse cx="175" cy="230" rx="120" ry="30" fill="#E2E8F0" />
-    <ellipse cx="175" cy="226" rx="105" ry="24" fill="white" stroke="#3B82F6" strokeWidth="2" />
+    <ellipse
+      cx="175"
+      cy="226"
+      rx="105"
+      ry="24"
+      fill="white"
+      stroke="#3B82F6"
+      strokeWidth="2"
+    />
     <ellipse cx="175" cy="222" rx="80" ry="17" fill="#EFF6FF" />
-
-    {/* Cloche / dome */}
     <path
       d="M105 222 C105 160 245 160 245 222"
       fill="none"
@@ -105,37 +105,53 @@ const Illustration = () => (
       strokeWidth="3"
       strokeLinecap="round"
     />
-    <line x1="175" y1="148" x2="175" y2="135" stroke="#3B82F6" strokeWidth="3" strokeLinecap="round" />
+    <line
+      x1="175"
+      y1="148"
+      x2="175"
+      y2="135"
+      stroke="#3B82F6"
+      strokeWidth="3"
+      strokeLinecap="round"
+    />
     <circle cx="175" cy="130" r="6" fill="#3B82F6" />
-
-    {/* Steam lines */}
-    <path d="M150 115 Q148 100 152 88" stroke="#93C5FD" strokeWidth="2" fill="none" strokeLinecap="round" />
-    <path d="M175 110 Q173 92 177 78" stroke="#93C5FD" strokeWidth="2" fill="none" strokeLinecap="round" />
-    <path d="M200 115 Q198 100 202 88" stroke="#93C5FD" strokeWidth="2" fill="none" strokeLinecap="round" />
-
-    {/* Fork (left) */}
+    <path
+      d="M150 115 Q148 100 152 88"
+      stroke="#93C5FD"
+      strokeWidth="2"
+      fill="none"
+      strokeLinecap="round"
+    />
+    <path
+      d="M175 110 Q173 92 177 78"
+      stroke="#93C5FD"
+      strokeWidth="2"
+      fill="none"
+      strokeLinecap="round"
+    />
+    <path
+      d="M200 115 Q198 100 202 88"
+      stroke="#93C5FD"
+      strokeWidth="2"
+      fill="none"
+      strokeLinecap="round"
+    />
     <g transform="rotate(-25, 80, 200)">
       <rect x="78" y="160" width="4" height="90" rx="2" fill="#3B82F6" opacity="0.5" />
       <rect x="72" y="158" width="2.5" height="30" rx="1.25" fill="#3B82F6" opacity="0.5" />
       <rect x="78" y="156" width="2.5" height="30" rx="1.25" fill="#3B82F6" opacity="0.5" />
       <rect x="84" y="158" width="2.5" height="30" rx="1.25" fill="#3B82F6" opacity="0.5" />
     </g>
-
-    {/* Knife (right) */}
     <g transform="rotate(25, 270, 200)">
       <rect x="268" y="160" width="4" height="95" rx="2" fill="#3B82F6" opacity="0.5" />
       <path d="M267 160 L273 160 L272 125 L268 125 Z" fill="#3B82F6" opacity="0.5" />
     </g>
-
-    {/* Decorative floating circles */}
     <circle cx="55" cy="100" r="5" fill="#3B82F6" opacity="0.15" />
     <circle cx="295" cy="90" r="7" fill="#3B82F6" opacity="0.1" />
     <circle cx="310" cy="280" r="6" fill="#3B82F6" opacity="0.12" />
     <circle cx="40" cy="290" r="4" fill="#3B82F6" opacity="0.15" />
     <circle cx="320" cy="170" r="5" fill="#3B82F6" opacity="0.1" />
     <circle cx="60" cy="180" r="3" fill="#3B82F6" opacity="0.2" />
-
-    {/* Sparkle dots */}
     <circle cx="130" cy="130" r="2" fill="#FBBF24" />
     <circle cx="220" cy="125" r="2" fill="#FBBF24" />
     <circle cx="175" cy="108" r="1.5" fill="#FBBF24" />
@@ -148,41 +164,39 @@ const Illustration = () => (
 
 const Login = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const [showPassword, setShowPassword] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
+
+  // ✅ FIX 1: Use AuthContext instead of manual API calls
+  const { login, isAuthenticated, user, loading } = useAuth();
+
+  // ✅ FIX 2: Redirect if already logged in
+  if (!loading && isAuthenticated && user) {
+    const redirectTo = user.role === "ADMIN" ? "/admin/dashboard" : "/dashboard";
+    return <Navigate to={redirectTo} replace />;
+  }
 
   const formik = useFormik({
-    initialValues: { email: "", password: "" },
+    // ✅ FIX 3: initialValues matches field name "username" (not "email")
+    initialValues: {
+      username: "",
+      password: "",
+    },
     validationSchema,
     onSubmit: async (values) => {
-      setIsLoading(true);
+      // ✅ FIX 4: Use AuthContext login (handles tokens, localStorage, state)
+      const result = await login(values.username, values.password);
 
-      try {
-        const res = await api.post("/public/api/v1/auth/login", values);
+      if (result.success) {
+        toast.success("Login successful!");
 
-        const result = res.data;
-
-        if (result.success) {
-          const { accessToken, refreshToken, roles } = result.data;
-
-          localStorage.setItem("accessToken", accessToken);
-          localStorage.setItem("refreshToken", refreshToken);
-          localStorage.setItem("roles", JSON.stringify(roles));
-
-          axios.defaults.headers.common["Authorization"] = `Bearer ${accessToken}`;
-
-          toast.success("Login successful!");
-
-          navigate("/admin/dashboard");
-        } else {
-          toast.error(result.message || "Login failed");
-        }
-      } catch (err) {
-        toast.error(
-          err.response?.data?.message || "Invalid username or password"
-        );
-      } finally {
-        setIsLoading(false);
+        // ✅ FIX 5: Redirect based on role + respect "from" location
+        const from = location.state?.from?.pathname;
+        const roleBasedRedirect =
+          result.user.role === "ADMIN" ? "/admin/dashboard" : "/dashboard";
+        navigate(from || roleBasedRedirect, { replace: true });
+      } else {
+        toast.error(result.message || "Invalid username or password");
       }
     },
   });
@@ -191,7 +205,6 @@ const Login = () => {
     window.location.href = `${API_BASE_URL}/auth/google`;
   };
 
-  /* ── input wrapper helper ── */
   const inputClass = (field) =>
     `w-full rounded-lg border ${
       formik.touched[field] && formik.errors[field]
@@ -208,7 +221,6 @@ const Login = () => {
           {/* ─────────── LEFT PANEL ─────────── */}
           <div className="hidden w-full items-center justify-center bg-gradient-to-br from-blue-600 via-blue-700 to-indigo-600 p-12 xl:flex xl:w-1/2">
             <div className="text-center">
-              {/* Logo */}
               <Link to="/" className="mb-6 inline-block">
                 <span className="text-4xl font-extrabold tracking-tight text-white">
                   🍽️ Restroly
@@ -244,20 +256,22 @@ const Login = () => {
 
               {/* ── FORM ── */}
               <form onSubmit={formik.handleSubmit} noValidate>
-                {/* Email */}
+                {/* ✅ FIX 6: Username field — label, htmlFor, id, error display all consistent */}
                 <div className="mb-5">
                   <label
-                    htmlFor="email"
+                    htmlFor="username"
                     className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300"
                   >
-                    Email
+                    Email or Username
                   </label>
                   <div className="relative">
-                   <input
+                    <input
                       id="username"
                       name="username"
                       type="text"
                       placeholder="Enter email or username"
+                      autoComplete="username"
+                      disabled={formik.isSubmitting}
                       value={formik.values.username}
                       onChange={formik.handleChange}
                       onBlur={formik.handleBlur}
@@ -267,8 +281,11 @@ const Login = () => {
                       <EmailIcon />
                     </span>
                   </div>
-                  {formik.touched.email && formik.errors.email && (
-                    <p className="mt-1.5 text-xs text-red-500">{formik.errors.email}</p>
+                  {/* ✅ FIX 7: Error display uses "username" (not "email") */}
+                  {formik.touched.username && formik.errors.username && (
+                    <p className="mt-1.5 text-xs text-red-500">
+                      {formik.errors.username}
+                    </p>
                   )}
                 </div>
 
@@ -287,7 +304,7 @@ const Login = () => {
                       type={showPassword ? "text" : "password"}
                       autoComplete="current-password"
                       placeholder="6+ Characters, 1 Capital letter"
-                      disabled={isLoading}
+                      disabled={formik.isSubmitting}
                       value={formik.values.password}
                       onChange={formik.handleChange}
                       onBlur={formik.handleBlur}
@@ -296,7 +313,9 @@ const Login = () => {
                     <button
                       type="button"
                       tabIndex={-1}
-                      aria-label={showPassword ? "Hide password" : "Show password"}
+                      aria-label={
+                        showPassword ? "Hide password" : "Show password"
+                      }
                       onClick={() => setShowPassword((p) => !p)}
                       className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 transition hover:text-gray-600 dark:hover:text-gray-300"
                     >
@@ -304,7 +323,9 @@ const Login = () => {
                     </button>
                   </div>
                   {formik.touched.password && formik.errors.password && (
-                    <p className="mt-1.5 text-xs text-red-500">{formik.errors.password}</p>
+                    <p className="mt-1.5 text-xs text-red-500">
+                      {formik.errors.password}
+                    </p>
                   )}
                 </div>
 
@@ -318,13 +339,13 @@ const Login = () => {
                   </Link>
                 </div>
 
-                {/* Submit */}
+                {/* Submit — ✅ FIX 8: uses formik.isSubmitting instead of separate isLoading */}
                 <button
                   type="submit"
-                  disabled={isLoading}
+                  disabled={formik.isSubmitting}
                   className="mb-5 flex w-full items-center justify-center gap-2 rounded-lg bg-blue-600 px-6 py-4 text-base font-medium text-white transition hover:bg-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-300 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-blue-500 dark:hover:bg-blue-600 dark:focus:ring-blue-800"
                 >
-                  {isLoading ? (
+                  {formik.isSubmitting ? (
                     <>
                       <SpinnerIcon />
                       Signing In…
@@ -333,26 +354,6 @@ const Login = () => {
                     "Sign In"
                   )}
                 </button>
-
-                {/* Divider */}
-                {/* <div className="relative mb-5 flex items-center">
-                  <div className="flex-grow border-t border-gray-200 dark:border-gray-600" />
-                  <span className="mx-4 shrink-0 text-xs uppercase text-gray-400 dark:text-gray-500">
-                    Or continue with
-                  </span>
-                  <div className="flex-grow border-t border-gray-200 dark:border-gray-600" />
-                </div>
-
-                
-                <button
-                  type="button"
-                  onClick={handleGoogleLogin}
-                  disabled={isLoading}
-                  className="flex w-full items-center justify-center gap-3 rounded-lg border border-gray-300 bg-gray-50 px-6 py-4 text-base font-medium text-gray-700 transition hover:bg-gray-100 focus:outline-none focus:ring-4 focus:ring-gray-200 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600 dark:focus:ring-gray-700"
-                >
-                  <GoogleIcon />
-                  Sign in with Google
-                </button> */}
 
                 {/* Sign-up link */}
                 <p className="mt-8 text-center text-sm text-gray-500 dark:text-gray-400">
