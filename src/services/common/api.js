@@ -1,9 +1,9 @@
 import axios from "axios";
 
-const REACT_APP_API_URL = import.meta.env.API_BASE_URL || "http://localhost:8181/restroly";
+const REACT_APP_API_URL = import.meta.env.API_BASE_URL || "http://alpha.api.restroly.in:8080/restroly";
 
 const api = axios.create({
-  baseURL: import.meta.env.API_BASE_URL || "http://localhost:8181/restroly",
+  baseURL: import.meta.env.API_BASE_URL || "http://alph.api.restroly.in:8080/restroly",
   baseURL: REACT_APP_API_URL,
   withCredentials: true,
   headers: {
