@@ -1,118 +1,78 @@
 import React, { useState, useEffect } from 'react';
-import { useSiteData } from '../../context/SiteContext.jsx';
-
-// ============================================
-// NAVIGATION COMPONENT
-// Responsive navbar with scroll effects
-// ============================================
+import { Link, useNavigate } from 'react-router-dom';
+import { useSiteData } from '@context/SiteContext.jsx';
 
 const Navigation = () => {
     const { siteData } = useSiteData();
+    const navigate = useNavigate();
     const [scrolled, setScrolled] = useState(false);
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
+    // Navbar background change on scroll
     useEffect(() => {
         const handleScroll = () => {
-            setScrolled(window.scrollY > 100);
+            setScrolled(window.scrollY > 50);
         };
-
         window.addEventListener('scroll', handleScroll);
         return () => window.removeEventListener('scroll', handleScroll);
     }, []);
 
-    // Close mobile menu on resize
-    useEffect(() => {
-        const handleResize = () => {
-            if (window.innerWidth >= 768) {
-                setMobileMenuOpen(false);
-            }
-        };
-
-        window.addEventListener('resize', handleResize);
-        return () => window.removeEventListener('resize', handleResize);
-    }, []);
-
-    // Prevent body scroll when mobile menu is open
-    useEffect(() => {
-        document.body.style.overflow = mobileMenuOpen ? 'hidden' : '';
-        return () => {
-            document.body.style.overflow = '';
-        };
-    }, [mobileMenuOpen]);
-
     if (!siteData) return null;
 
-    const handleNavClick = () => {
+    const handleLogoClick = (e) => {
+        e.preventDefault();
+        navigate('/');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
         setMobileMenuOpen(false);
     };
+
+    const NAV_ITEMS = [
+        { label: "Home", href: "#hero" },
+        { label: "About", href: "#about" },
+        { label: "Menu", href: "#menu" },
+        { label: "Gallery", href: "#gallery" },
+        { label: "Reservations", href: "#reservations" },
+        { label: "Contact", href: "#contact" }
+    ];
 
     return (
         <nav className={`nav ${scrolled ? 'nav-scrolled' : ''}`}>
             <div className="nav-container">
-                {/* Logo */}
-                <a href="#" className="nav-logo font-heading">
-                    {siteData.brand.logo ? (
-                        <img src={siteData.brand.logo} alt={siteData.brand.name} />
+                <Link to="/" className="nav-logo" onClick={handleLogoClick}>
+                    {siteData.navigation?.logo ? (
+                        <img src={siteData.navigation.logo} alt={siteData.navigation?.name || 'Restaurant'} />
                     ) : (
-                        siteData.brand.name
+                        siteData.navigation?.name || 'Restroly'
                     )}
-                </a>
+                </Link>
 
-                {/* Desktop Menu */}
                 <div className="nav-links">
-                    {siteData.navigation.map((item, index) => (
-                        <a 
-                            key={index} 
-                            href={item.href} 
-                            className="nav-link"
-                        >
+                    {NAV_ITEMS.map(item => (
+                        <a key={item.href} href={item.href} className="nav-link">
                             {item.label}
                         </a>
                     ))}
                 </div>
 
-                {/* Reserve Button */}
-                <a href="#reservations" className="nav-reserve btn btn-outline">
-                    Reserve
-                </a>
-
-                {/* Mobile Menu Button */}
-                <button 
+                <button
                     className="nav-mobile-btn"
                     onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-                    aria-label="Toggle menu"
                 >
-                    {mobileMenuOpen ? (
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <path d="M6 18L18 6M6 6l12 12" />
-                        </svg>
-                    ) : (
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <path d="M4 6h16M4 12h16M4 18h16" />
-                        </svg>
-                    )}
+                    {mobileMenuOpen ? "✕" : "☰"}
                 </button>
             </div>
 
-            {/* Mobile Menu */}
             <div className={`nav-mobile-menu ${mobileMenuOpen ? 'open' : ''}`}>
-                {siteData.navigation.map((item, index) => (
-                    <a 
-                        key={index} 
-                        href={item.href} 
+                {NAV_ITEMS.map(item => (
+                    <a
+                        key={item.href}
+                        href={item.href}
                         className="nav-mobile-link"
-                        onClick={handleNavClick}
+                        onClick={() => setMobileMenuOpen(false)}
                     >
                         {item.label}
                     </a>
                 ))}
-                <a 
-                    href="#reservations" 
-                    className="btn btn-outline nav-mobile-reserve"
-                    onClick={handleNavClick}
-                >
-                    Reserve a Table
-                </a>
             </div>
 
             <style>{`
@@ -121,14 +81,28 @@ const Navigation = () => {
                     top: 0;
                     left: 0;
                     right: 0;
-                    z-index: var(--z-fixed);
-                    padding: var(--spacing-lg) var(--spacing-md);
-                    transition: all var(--transition-normal);
+                    z-index: var(--z-fixed, 1000);
+                    padding: 12px 16px;
+                    background: transparent;
+                    transition:
+                        background-color var(--transition-normal),
+                        box-shadow var(--transition-normal),
+                        padding var(--transition-normal);
+                }
+
+                .nav-scrolled {
+                    background: var(--color-header-bg);
+                    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+                    border-bottom: 1px solid var(--color-border-primary);
                 }
 
                 @media (min-width: 768px) {
                     .nav {
                         padding: var(--spacing-lg) var(--spacing-xl);
+                    }
+
+                    .nav-scrolled {
+                        padding: var(--spacing-md) var(--spacing-xl);
                     }
                 }
 
@@ -138,14 +112,23 @@ const Navigation = () => {
                     display: flex;
                     justify-content: space-between;
                     align-items: center;
+                    gap: var(--spacing-md);
                 }
 
                 .nav-logo {
+                    display: flex;
+                    align-items: center;
+                    text-decoration: none;
+                    color: var(--color-text-primary);
                     font-size: var(--text-xl);
                     font-weight: 700;
-                    letter-spacing: 0.1em;
-                    color: var(--color-text-primary);
-                    text-decoration: none;
+                    letter-spacing: 0.08em;
+                    width: 100%;
+                    transition: opacity var(--transition-normal);
+                }
+
+                .nav-logo:hover {
+                    opacity: 0.85;
                 }
 
                 @media (min-width: 768px) {
@@ -155,8 +138,9 @@ const Navigation = () => {
                 }
 
                 .nav-logo img {
-                    height: 40px;
+                    height: 42px;
                     width: auto;
+                    display: block;
                 }
 
                 .nav-links {
@@ -172,11 +156,14 @@ const Navigation = () => {
                 }
 
                 .nav-link {
+                    position: relative;
                     color: var(--color-text-primary);
                     text-decoration: none;
                     font-size: var(--text-sm);
-                    letter-spacing: 0.15em;
+                    font-weight: 600;
                     text-transform: uppercase;
+                    letter-spacing: 0.12em;
+                    padding: var(--spacing-xs) 0;
                     transition: color var(--transition-normal);
                 }
 
@@ -184,24 +171,38 @@ const Navigation = () => {
                     color: var(--color-primary);
                 }
 
-                .nav-reserve {
-                    display: none;
-                    padding: var(--spacing-sm) var(--spacing-lg);
+                .nav-link::after {
+                    content: "";
+                    position: absolute;
+                    left: 0;
+                    bottom: -4px;
+                    width: 0;
+                    height: 2px;
+                    background: var(--color-primary);
+                    transition: width var(--transition-normal);
                 }
 
-                @media (min-width: 768px) {
-                    .nav-reserve {
-                        display: block;
-                    }
+                .nav-link:hover::after {
+                    width: 100%;
                 }
 
                 .nav-mobile-btn {
-                    display: block;
-                    background: none;
-                    border: none;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    width: 42px;
+                    height: 42px;
+                    background: transparent;
+                    border: 1px solid var(--color-border-primary);
                     color: var(--color-text-primary);
                     cursor: pointer;
-                    padding: var(--spacing-sm);
+                    font-size: 24px;
+                    transition: all var(--transition-normal);
+                }
+
+                .nav-mobile-btn:hover {
+                    border-color: var(--color-primary);
+                    color: var(--color-primary);
                 }
 
                 @media (min-width: 768px) {
@@ -210,29 +211,29 @@ const Navigation = () => {
                     }
                 }
 
-                .nav-mobile-btn svg {
-                    width: 24px;
-                    height: 24px;
-                }
-
                 .nav-mobile-menu {
                     position: fixed;
-                    top: 70px;
-                    left: 0;
-                    right: 0;
-                    bottom: 0;
-                    background: rgba(0, 0, 0, 0.98);
+                    inset: 0;
+                    z-index: calc(var(--z-fixed, 1000) - 1);
+                    background: var(--color-bg-primary);
                     display: flex;
                     flex-direction: column;
-                    align-items: center;
                     justify-content: center;
+                    align-items: center;
                     gap: var(--spacing-xl);
+
+                    transform: translateY(-100%);
                     opacity: 0;
                     visibility: hidden;
-                    transition: all var(--transition-normal);
+
+                    transition:
+                        transform 0.35s ease,
+                        opacity 0.35s ease,
+                        visibility 0.35s ease;
                 }
 
                 .nav-mobile-menu.open {
+                    transform: translateY(0);
                     opacity: 1;
                     visibility: visible;
                 }
@@ -240,7 +241,8 @@ const Navigation = () => {
                 .nav-mobile-link {
                     color: var(--color-text-primary);
                     text-decoration: none;
-                    font-size: var(--text-lg);
+                    font-size: var(--text-xl);
+                    font-weight: 600;
                     letter-spacing: 0.15em;
                     text-transform: uppercase;
                     transition: color var(--transition-normal);
@@ -250,8 +252,8 @@ const Navigation = () => {
                     color: var(--color-primary);
                 }
 
-                .nav-mobile-reserve {
-                    margin-top: var(--spacing-lg);
+                .nav-mobile-link:active {
+                    color: var(--color-primary-hover);
                 }
             `}</style>
         </nav>

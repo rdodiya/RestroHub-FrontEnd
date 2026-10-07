@@ -1,132 +1,529 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import ApiService from '../services/ApiService.js';
-import { defaultSiteData } from '../data/defaultData.js';
+/**
+ * SiteContext.jsx
+ * Path: src/context/SiteContext.jsx
+ *
+ * CHANGES FROM ORIGINAL:
+ *  1. fetchSiteData() now calls the real backend endpoint:
+ *     GET /public/api/v1/sites/{siteId}/config
+ *     The siteId is derived from the URL: /Restrohub/:restaurantSlug/:branchId
+ *     We use restaurantSlug as siteId (matches SiteConfig.siteId / pageSlug).
+ *
+ *  2. mapApiResponseToSiteData() translates the PublicSiteConfigResponse
+ *     (sections array + theme + brand) → the flat siteData shape that all
+ *     customer components already consume. Zero changes needed in child components.
+ *
+ *  3. Theme application now uses the backend ThemeResponse field names
+ *     (primaryColor, bgPrimary, isDarkMode …) instead of the old camelCase keys.
+ *
+ *  4. updateSiteConfig() — helper for the admin Website panel to PATCH
+ *     theme + section content back to the API and also refresh the live
+ *     preview instantly via updateTheme(). Now accepts an optional
+ *     sectionsPayload (flat siteData shape) which is converted into the
+ *     sections[] array the backend expects, keyed by SectionType.
+ *
+ *  5. Saved localStorage config (admin override) still takes priority so that
+ *     the live preview in the admin panel works even before the API is called.
+ */
 
-// ============================================
-// SITE CONTEXT
-// Provides global state for site data and theme
-// ============================================
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { defaultSiteData } from '@data/defaultData.js';
+import { getAccessToken } from '@services/common/authStorage';
+import api from '@services/common/api';
+import toast from 'react-hot-toast';
+import { getSubdomainSlug } from '../utils/subdomain';
+
+// ─── Constants ────────────────────────────────────────────────────────────────
+
+const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8181/restroly';
+const API_BASE = `${BASE_URL}/public/api/v1`;
+const STORAGE_KEY = 'website-theme-config';
+
+// ─── Context ──────────────────────────────────────────────────────────────────
 
 const SiteContext = createContext(null);
 
-// Custom hook to use site context
 export const useSiteData = () => {
-    const context = useContext(SiteContext);
-    if (!context) {
-        throw new Error('useSiteData must be used within a SiteProvider');
-    }
-    return context;
+  const ctx = useContext(SiteContext);
+  if (!ctx) throw new Error('useSiteData must be used within a SiteProvider');
+  return ctx;
 };
 
-// Theme management hook
 export const useTheme = () => {
-    const { siteData, updateTheme } = useSiteData();
-    return {
-        theme: siteData?.theme || defaultSiteData.theme,
-        updateTheme
-    };
+  const { siteData, updateTheme } = useSiteData();
+  return { theme: siteData?.theme || defaultSiteData.theme, updateTheme };
 };
 
-// Site Provider Component
+// ─── Helper: map backend PublicSiteConfigResponse → flat siteData shape ───────
+//
+// The backend returns:
+//   { siteId, siteName, templateKey, theme: ThemeResponse, menu: MenuResponse, sections: [...] }
+//
+// Each section has: { sectionKey, displayOrder, isVisible, content: {...}, styles }
+// We extract each section's content block and merge it into the flat siteData shape.
+
+function mapApiResponseToSiteData(apiData) {
+  const sectionMap = {};
+  (apiData.sections || []).forEach((section) => {
+    if (section.isVisible !== false) {
+      sectionMap[section.sectionKey.toUpperCase()] = section;
+    }
+  });
+
+  const getSection = (key) => sectionMap[key.toUpperCase()] || {};
+  const getContent = (key) => getSection(key).content || {};
+
+  // ============================================
+  // Theme
+  // ============================================
+  const apiTheme = apiData.theme || {};
+  const theme = {
+    // ========= Basic Info =========
+    id: apiTheme.id ?? defaultSiteData.id,
+    name: apiTheme.name || defaultSiteData.name,
+    themeKey: apiTheme.themeKey || defaultSiteData.themeKey,
+    description: apiTheme.description || defaultSiteData.description,
+
+    // ========= Mode =========
+    mode: apiTheme.isDarkMode ? 'dark' : 'light',
+
+    // ========= Primary Colors =========
+    primaryColor: apiTheme.primaryColor || defaultSiteData.primary,
+    colorPrimaryHover: apiTheme.colorPrimaryHover || defaultSiteData.primaryHover,
+    primaryDark: apiTheme.colorPrimaryDark || defaultSiteData.primaryDark,
+    secondaryColor: apiTheme.secondaryColor || defaultSiteData.secondaryColor,
+    colorAccent: apiTheme.colorAccent || defaultSiteData.colorAccent,
+
+    // ========= Background Colors =========
+    bgPrimary: apiTheme.bgPrimary || defaultSiteData.bgPrimary,
+    bgSecondary: apiTheme.bgSecondary || defaultSiteData.bgSecondary,
+    bgTertiary: apiTheme.bgTertiary || defaultSiteData.bgTertiary,
+    bgCard: apiTheme.bgTertiary || defaultSiteData.bgCard,
+
+    // ========= Text Colors =========
+    primaryTextColor: apiTheme.primaryTextColor || defaultSiteData.textPrimary,
+    secondaryTextColor: apiTheme.secondaryTextColor || defaultSiteData.textSecondary,
+    textMuted: apiTheme.textMuted || defaultSiteData.textMuted,
+
+    // ========= Component Colors =========
+    headerBackground: apiTheme.headerBackground || defaultSiteData.headerBackground,
+    footerBackground: apiTheme.footerBackground || defaultSiteData.footerBackground,
+    buttonBackground: apiTheme.buttonBackground || defaultSiteData.buttonBackground,
+    buttonText: apiTheme.buttonText || defaultSiteData.buttonText,
+
+    // ========= Borders =========
+    borderPrimary: apiTheme.borderColor || defaultSiteData.borderPrimary,
+    borderSecondary: apiTheme.borderColor || defaultSiteData.borderSecondary,
+    borderColor: apiTheme.borderColor || defaultSiteData.borderColor,
+
+    // ========= Overlay =========
+    overlayDark: defaultSiteData.overlayDark,
+    overlayDarker: defaultSiteData.overlayDarker,
+    overlayLight: defaultSiteData.overlayLight,
+
+    // ========= Typography =========
+    fontPrimary: apiTheme.fontPrimary || defaultSiteData.fontPrimary,
+    fontHeading: apiTheme.fontHeading || defaultSiteData.fontHeading,
+    fontSizeBase: apiTheme.fontSizeBase || defaultSiteData.fontSizeBase,
+
+    // ========= Additional Styles =========
+    customStylesJson: apiTheme.customStylesJson || defaultSiteData.customStylesJson,
+
+    // ========= Status =========
+    isActive: apiTheme.isActive ?? defaultSiteData.isActive,
+    isDefault: apiTheme.isDefault ?? defaultSiteData.isDefault,
+    isDarkMode: apiTheme.isDarkMode ?? defaultSiteData.isDarkMode,
+
+    // ========= Audit =========
+    createdAt: apiTheme.createdAt || defaultSiteData.createdAt,
+    updatedAt: apiTheme.updatedAt || defaultSiteData.updatedAt,
+  };
+
+  // ============================================
+  // Menu Entity
+  // ============================================
+  const menuEntity = apiData.menu || {};
+  const menuCategories = (menuEntity.categories || []).map((category) => category.name);
+  const menuItems = {};
+  (menuEntity.categories || []).forEach((category) => {
+    menuItems[category.name] = (category.foods || []).map((food) => ({
+      id: food.foodId,
+      name: food.name,
+      description: food.description,
+      image: food.imageUrl,
+      price: food.price,
+      isVeg: food.isVeg,
+      isAvailable: food.isAvailable,
+    }));
+  });
+
+  // ============================================
+  // Return
+  // ============================================
+
+  return {
+    siteId: apiData.siteId,
+
+    siteName: apiData.siteName,
+
+    templateKey: apiData.templateKey,
+
+    theme,
+
+    navigation: getContent('NAVIGATION') ?? defaultSiteData.navigation,
+
+    hero: {
+      title: getContent('HERO').title ?? defaultSiteData.hero.title,
+
+      backgroundImage: getContent('HERO').backgroundImage ?? defaultSiteData.hero.backgroundImage,
+
+      ctaPrimary: getContent('HERO').ctaPrimary ?? defaultSiteData.hero.ctaPrimary,
+
+      ctaSecondary: getContent('HERO').ctaSecondary ?? defaultSiteData.hero.ctaSecondary,
+    },
+
+    about: {
+      subtitle: getContent('ABOUT')?.subtitle ?? defaultSiteData.about.subtitle,
+
+      title: Array.isArray(sectionMap.ABOUT?.title)
+        ? getContent('ABOUT').title
+        : [getContent('ABOUT')?.title].filter(Boolean),
+
+      description: Array.isArray(sectionMap.ABOUT?.description)
+        ? getContent('ABOUT').description
+        : [getContent('ABOUT')?.description].filter(Boolean),
+
+      image: getContent('ABOUT')?.image ?? defaultSiteData.about.image,
+
+      stats: getContent('ABOUT')?.stats ?? defaultSiteData.about.stats,
+
+      hours: getContent('ABOUT')?.hours ?? defaultSiteData.about.hours,
+    },
+
+    menu: {
+      title: menuEntity.menuName ?? defaultSiteData.menu.title,
+
+      subtitle: menuEntity.menuDesc ?? defaultSiteData.menu.subtitle,
+
+      categories: menuCategories,
+
+      items: menuItems,
+    },
+
+    gallery: {
+      subtitle: getContent('GALLERY').subtitle ?? defaultSiteData.gallery.subtitle,
+
+      title: getContent('GALLERY').title ?? defaultSiteData.gallery.title,
+
+      images: getContent('GALLERY').images ?? defaultSiteData.gallery.images,
+    },
+
+    reservations: {
+      subtitle: getContent('RESERVATION').subtitle ?? defaultSiteData.reservations.subtitle,
+
+      title: getContent('RESERVATION').title ?? defaultSiteData.reservations.title,
+
+      description:
+        getContent('RESERVATION').description ?? defaultSiteData.reservations.description,
+
+      backgroundImage:
+        getContent('RESERVATION').backgroundImage ?? defaultSiteData.reservations.backgroundImage,
+
+      timeSlots: getContent('RESERVATION').timeSlots ?? defaultSiteData.reservations.timeSlots,
+
+      guestOptions:
+        getContent('RESERVATION').guestOptions ?? defaultSiteData.reservations.guestOptions,
+
+      formFields: getContent('RESERVATION').formFields ?? defaultSiteData.reservations.formFields,
+    },
+
+    contact: {
+      location: getContent('CONTACT').location ?? defaultSiteData.contact.location,
+
+      hours: getContent('CONTACT').hours ?? defaultSiteData.contact.hours,
+
+      contact: getContent('CONTACT').contact ?? defaultSiteData.contact.contact,
+    },
+
+    footer: getContent('FOOTER') ?? defaultSiteData.footer,
+
+    social: getContent('FOOTER').socialLinks ?? defaultSiteData.social,
+
+    serviceFAB: getContent('SERVICE_FAB') ?? {},
+  };
+}
+
+// ─── Helper: build backend sections[] payload from flat editor siteData ───────
+//
+// Converts the flat shape produced above (and edited in SiteContentEditor)
+// back into the sections[] array keyed by SectionType, matching what
+// mapApiResponseToSiteData reads on the way in.
+
+function buildSectionsPayload(flatSiteData) {
+  return [
+    { sectionKey: 'NAVIGATION', content: flatSiteData.navigation },
+    { sectionKey: 'HERO', content: flatSiteData.hero },
+    { sectionKey: 'ABOUT', content: flatSiteData.about },
+    { sectionKey: 'GALLERY', content: flatSiteData.gallery },
+    {
+      sectionKey: 'RESERVATION',
+      content: {
+        subtitle: flatSiteData.reservations.subtitle,
+        title: flatSiteData.reservations.title,
+        description: flatSiteData.reservations.description,
+        backgroundImage: flatSiteData.reservations.backgroundImage,
+        timeSlots: flatSiteData.reservations.timeSlots,
+        guestOptions: flatSiteData.reservations.guestOptions,
+        formFields: flatSiteData.reservations.formFields,
+      },
+    },
+    { sectionKey: 'CONTACT', content: flatSiteData.contact },
+    {
+      sectionKey: 'FOOTER',
+      content: {
+        text: flatSiteData.footer?.text,
+        socialLinks: flatSiteData.footer?.socialLinks ?? flatSiteData.social,
+      },
+    },
+    ...(flatSiteData.serviceFAB
+      ? [{ sectionKey: 'SERVICE_FAB', content: flatSiteData.serviceFAB }]
+      : []),
+  ];
+}
+
+// ─── Provider ─────────────────────────────────────────────────────────────────
+
 export const SiteProvider = ({ children }) => {
-    const [siteData, setSiteData] = useState(null);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState(null);
+  const [siteData, setSiteData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [slug, setSlug] = useState('');
+  const [branch, setBranch] = useState('');
 
-    // Apply theme to CSS variables
-    const applyTheme = useCallback((theme) => {
-        if (!theme) return;
+  // ── Apply theme CSS variables to :root ──────────────────────────────────────
+  const applyTheme = useCallback((theme) => {
+    if (!theme) return;
+    const root = document.documentElement;
+    const varMap = {
+      // ========= Primary Colors =========
+      primaryColor: '--color-primary',
+      colorPrimaryHover: '--color-primary-hover',
+      primaryDark: '--color-primary-dark',
+      secondaryColor: '--color-secondary',
+      colorAccent: '--color-accent',
 
-        const root = document.documentElement;
-        
-        // Map theme object to CSS variables
-        const themeMapping = {
-            primary: '--color-primary',
-            primaryHover: '--color-primary-hover',
-            primaryDark: '--color-primary-dark',
-            bgPrimary: '--color-bg-primary',
-            bgSecondary: '--color-bg-secondary',
-            bgTertiary: '--color-bg-tertiary',
-            textPrimary: '--color-text-primary',
-            textSecondary: '--color-text-secondary',
-            textMuted: '--color-text-muted'
+      // ========= Background Colors =========
+      bgPrimary: '--color-bg-primary',
+      bgSecondary: '--color-bg-secondary',
+      bgTertiary: '--color-bg-tertiary',
+      bgCard: '--color-bg-card',
+
+      // ========= Text Colors =========
+      primaryTextColor: '--color-text-primary',
+      secondaryTextColor: '--color-text-secondary',
+      textMuted: '--color-text-muted',
+
+      // ========= Component Colors =========
+      headerBackground: '--color-header-bg',
+      footerBackground: '--color-footer-bg',
+      buttonBackground: '--color-button-bg',
+      buttonText: '--color-button-text',
+
+      borderPrimary: '--color-border-primary',
+      borderSecondary: '--color-border-secondary',
+    };
+
+    Object.entries(varMap).forEach(([key, cssVar]) => {
+      if (theme[key]) root.style.setProperty(cssVar, theme[key]);
+    });
+
+    if (theme.primaryColor) {
+      root.style.setProperty('--color-text-accent', theme.primaryColor);
+      root.style.setProperty('--color-border-accent', theme.primaryColor);
+    }
+
+    root.setAttribute('data-site-theme', theme.isDarkMode ? 'dark' : 'light');
+  }, []);
+
+  // ── Get siteId from current URL path (/Restrohub/:slug/:branchId) ───────────
+  // Public site slug: subdomain (royalbites.restroly.in) first, then /Restrohub/:slug/:branchId.
+  const getSiteIdFromUrl = useCallback(() => {
+    const sub = getSubdomainSlug();
+    if (sub) return sub;
+    const parts = window.location.pathname.split('/').filter(Boolean);
+    // e.g. ['Restrohub', 'spice-route', '1'] → 'spice-route'
+    return parts[0]?.toLowerCase() === 'restrohub' ? parts[1] || null : null;
+  }, []);
+
+  // ── Main data loader ─────────────────────────────────────────────────────────
+  const loadSiteData = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+
+    const savedConfig = (() => {
+      try {
+        return JSON.parse(localStorage.getItem(STORAGE_KEY));
+      } catch {
+        return null;
+      }
+    })();
+
+    try {
+      const currentSlug = getSiteIdFromUrl() || (await fetchSlug());
+      let data;
+
+      if (currentSlug) {
+        const res = await fetch(`${API_BASE}/sites/${currentSlug}/config`);
+        if (!res.ok) throw new Error(`API ${res.status}`);
+        const apiResponse = await res.json();
+        data = mapApiResponseToSiteData(apiResponse);
+      } else {
+        // Fallback when not on a restaurant page (e.g. admin panel uses preview)
+        data = { ...defaultSiteData };
+      }
+
+      setSiteData(data);
+
+      // Admin override takes priority over API theme
+      if (savedConfig?.theme) {
+        applyTheme(savedConfig.theme);
+      } else {
+        applyTheme(data.theme);
+      }
+    } catch (err) {
+      console.error('SiteContext: failed to load site data', err);
+      setError(err.message);
+
+      const fallback = { ...defaultSiteData };
+      setSiteData(fallback);
+
+      if (savedConfig?.theme) {
+        applyTheme(savedConfig.theme);
+      } else {
+        applyTheme(fallback.theme);
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, [applyTheme, getSiteIdFromUrl]);
+
+  // ── Update theme (called by admin Website panel on palette change) ──────────
+  const updateTheme = useCallback(
+    (newTheme) => {
+      setSiteData((prev) => {
+        const updatedTheme = {
+          ...prev.theme,
+          ...newTheme,
         };
+        applyTheme(updatedTheme);
+        return {
+          ...prev,
+          theme: updatedTheme,
+        };
+      });
+    },
+    [applyTheme]
+  );
 
-        Object.entries(themeMapping).forEach(([key, cssVar]) => {
-            if (theme[key]) {
-                root.style.setProperty(cssVar, theme[key]);
-            }
-        });
+  // ── Update specific section data (admin live-edit) ──────────────────────────
+  const updateTemplate = useCallback((templateKey) => {
+    setSiteData((prev) => ({ ...prev, templateKey }));
+  }, []);
 
-        // Update accent colors that depend on primary
-        if (theme.primary) {
-            root.style.setProperty('--color-text-accent', theme.primary);
-            root.style.setProperty('--color-border-accent', theme.primary);
-        }
-    }, []);
+  const updateSection = useCallback((section, data) => {
+    setSiteData((prev) => ({
+      ...prev,
+      [section]: { ...prev?.[section], ...data },
+    }));
+  }, []);
 
-    // Load site data from API
-    const loadSiteData = useCallback(async () => {
-        try {
-            setLoading(true);
-            setError(null);
-            
-            const data = await ApiService.fetchSiteData();
-            setSiteData(data);
-            
-            // Apply theme from API data
-            if (data?.theme) {
-                applyTheme(data.theme);
-            }
-        } catch (err) {
-            console.error('Failed to load site data:', err);
-            setError(err.message);
-            
-            // Fallback to default data
-            setSiteData(defaultSiteData);
-            applyTheme(defaultSiteData.theme);
-        } finally {
-            setLoading(false);
-        }
-    }, [applyTheme]);
+  const updateSiteConfig = useCallback(async () => {
+    if (!siteData) return;
+    const currentSlug = slug || (await fetchSlug()) || '1';
 
-    // Update theme dynamically
-    const updateTheme = useCallback((newTheme) => {
-        setSiteData(prev => ({
-            ...prev,
-            theme: { ...prev?.theme, ...newTheme }
-        }));
-        applyTheme(newTheme);
-    }, [applyTheme]);
+    // 1. Save current theme to localStorage
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        theme: siteData.theme,
+      })
+    );
 
-    // Update specific section of site data
-    const updateSection = useCallback((section, data) => {
-        setSiteData(prev => ({
-            ...prev,
-            [section]: { ...prev?.[section], ...data }
-        }));
-    }, []);
+    // 2. Apply the current theme to the page
+    applyTheme(siteData.theme);
 
-    // Initial load
-    useEffect(() => {
-        loadSiteData();
-    }, [loadSiteData]);
+    // 3. Persist to backend
+    try {
+      const token = getAccessToken();
+      const res = await fetch(`${API_BASE}/sites/${currentSlug}/config`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          templateKey: siteData.templateKey,
+          theme: siteData.theme,
+          sections: buildSectionsPayload(siteData),
+        }),
+      });
 
-    // Context value
-    const value = {
+      if (!res.ok) {
+        // Surface backend messages such as "Upgrade required: ..." (403 UPGRADE_REQUIRED).
+        const body = await res.json().catch(() => ({}));
+        const message = body.message || `Failed to save configuration (Status: ${res.status})`;
+        toast.error(message);
+        throw new Error(message);
+      }
+    } catch (err) {
+      console.warn('SiteContext: could not persist config to backend', err);
+      throw err;
+    }
+  }, [siteData, slug, applyTheme]);
+
+  const fetchSlug = async () => {
+    debugger;
+    try {
+      const response = await api.get('/secure/api/v1/users/fetchRestaurantId');
+      const data = response.data || {};
+      const resolvedSlug = data.restaurantName
+        ? data.restaurantName
+        : //.trim().toLowerCase().replace(/\s+/g, '-')
+          data.restaurantId
+          ? String(data.restaurantId)
+          : 'rajkot-dhaba';
+
+      setSlug(resolvedSlug);
+      return resolvedSlug;
+    } catch (err) {
+      console.error('Could not fetch slug from /fetchRestaurantId:', err);
+      const fallbackSlug = 'rajkot-dhaba';
+      setSlug(fallbackSlug);
+      return fallbackSlug;
+    }
+  };
+
+  useEffect(() => {
+    loadSiteData();
+  }, [loadSiteData]);
+
+  return (
+    <SiteContext.Provider
+      value={{
         siteData,
         loading,
         error,
+        slug,
+        fetchSlug,
         refreshData: loadSiteData,
         updateTheme,
-        updateSection
-    };
-
-    return (
-        <SiteContext.Provider value={value}>
-            {children}
-        </SiteContext.Provider>
-    );
+        updateTemplate,
+        updateSection,
+        updateSiteConfig,
+      }}
+    >
+      {children}
+    </SiteContext.Provider>
+  );
 };
 
 export default SiteContext;

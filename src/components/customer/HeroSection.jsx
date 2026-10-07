@@ -1,5 +1,5 @@
 import React from 'react';
-import { useSiteData } from '../../context/SiteContext.jsx';
+import { useSiteData } from '@context/SiteContext.jsx';
 
 // ============================================
 // HERO SECTION COMPONENT
@@ -11,41 +11,70 @@ const HeroSection = () => {
 
     if (!siteData) return null;
 
-    const { hero, brand } = siteData;
+    const { hero, navigation } = siteData;
+
+    const title0 = Array.isArray(hero.title)
+        ? hero.title[0]
+        : typeof hero.title === 'string'
+            ? hero.title.split(' ')[0]
+            : 'Taste The';
+
+    const title1 = Array.isArray(hero.title)
+        ? hero.title[1] || ''
+        : typeof hero.title === 'string'
+            ? hero.title.split(' ').slice(1).join(' ')
+            : 'Difference';
 
     return (
-        <section 
+        <section
             className="hero hero-bg"
             style={{
-                backgroundImage: `linear-gradient(var(--color-overlay-dark), var(--color-overlay-darker)), url('${hero.backgroundImage}')`
-            }}
+                backgroundImage: `
+                linear-gradient(
+                    rgba(0,0,0,0.65),
+                    rgba(0,0,0,0.75)
+                ),
+                url('${hero.backgroundImage || 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4'}')
+            `}}
         >
             <div className="hero-content">
                 {/* Established Tag */}
-                <p className="hero-established animate-pulse">
-                    {brand.established}
-                </p>
+                {navigation?.established && (
+                    <p className="hero-established animate-pulse">
+                        {navigation.established}
+                    </p>
+                )}
 
                 {/* Title */}
                 <h1 className="hero-title font-heading">
-                    {hero.title[0]}
-                    <br />
-                    <span className="text-stroke">{hero.title[1]}</span>
+                    {title0}
+                    {title1 && (
+                        <>
+                            <br />
+                            <span className="text-stroke">{title1}</span>
+                        </>
+                    )}
                 </h1>
 
                 {/* Tagline */}
-                <p className="hero-tagline">
-                    {brand.tagline}
-                </p>
+                {navigation?.tagline && (
+                    <p className="hero-tagline">
+                        {navigation.tagline}
+                    </p>
+                )}
 
                 {/* CTA Buttons */}
                 <div className="hero-cta">
-                    <a href={hero.ctaPrimary.href} className="btn btn-primary">
-                        {hero.ctaPrimary.label}
-                    </a>
-                    <a href={hero.ctaSecondary.href} className="btn btn-outline">
-                        {hero.ctaSecondary.label}
-                    </a>
+                    {hero.ctaPrimary?.label && (
+                        <a href={hero.ctaPrimary.href || '#menu'} className="btn btn-primary">
+                            {hero.ctaPrimary.label}
+                        </a>
+                    )}
+                    {hero.ctaSecondary?.label && (
+                        <a href={hero.ctaSecondary.href || '#reservations'} className="btn btn-outline">
+                            {hero.ctaSecondary.label}
+                        </a>
+                    )}
                 </div>
             </div>
 
@@ -64,6 +93,7 @@ const HeroSection = () => {
                     justify-content: center;
                     position: relative;
                     padding: var(--spacing-md);
+                    color: #ffffff;
                 }
 
                 .hero-content {
@@ -92,6 +122,7 @@ const HeroSection = () => {
                     font-weight: 700;
                     line-height: 1.1;
                     margin-bottom: var(--spacing-md);
+                    color: #ffffff;
                 }
 
                 @media (min-width: 640px) {
@@ -113,10 +144,15 @@ const HeroSection = () => {
                     }
                 }
 
+                .text-stroke {
+                    color: transparent;
+                    -webkit-text-stroke: 2px var(--color-primary);
+                }
+
                 .hero-tagline {
                     font-size: var(--text-base);
                     font-weight: 300;
-                    color: var(--color-text-secondary);
+                    color: rgba(255,255,255,0.9);
                     max-width: 600px;
                     margin: 0 auto var(--spacing-xl);
                     line-height: 1.8;
@@ -157,7 +193,7 @@ const HeroSection = () => {
                     bottom: var(--spacing-2xl);
                     left: 50%;
                     transform: translateX(-50%);
-                    color: var(--color-text-primary);
+                    color: #ffffff;
                     display: none;
                 }
 
@@ -165,6 +201,10 @@ const HeroSection = () => {
                     .hero-scroll {
                         display: block;
                     }
+                }
+
+                .hero-scroll svg {
+                    stroke: var(--color-primary);
                 }
             `}</style>
         </section>

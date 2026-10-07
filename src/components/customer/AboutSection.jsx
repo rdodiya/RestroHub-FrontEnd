@@ -1,5 +1,5 @@
 import React from 'react';
-import { useSiteData } from '../../context/SiteContext.jsx';
+import { useSiteData } from '@context/SiteContext.jsx';
 
 // ============================================
 // ABOUT SECTION COMPONENT
@@ -11,7 +11,26 @@ const AboutSection = () => {
 
     if (!siteData) return null;
 
-    const { about } = siteData;
+    const { about = {} } = siteData;
+    const title0 = Array.isArray(about.title)
+        ? about.title[0]
+        : typeof about.title === 'string'
+            ? about.title.split(' ')[0]
+            : 'Authentic';
+
+    const title1 = Array.isArray(about.title)
+        ? about.title[1] || ''
+        : typeof about.title === 'string'
+            ? about.title.split(' ').slice(1).join(' ')
+            : 'Indian Cuisine';
+
+    const descriptions = Array.isArray(about.description)
+        ? about.description
+        : typeof about.description === 'string'
+            ? [about.description]
+            : [];
+
+    const stats = Array.isArray(about.stats) ? about.stats : [];
 
     return (
         <section id="about" className="about section">
@@ -19,38 +38,44 @@ const AboutSection = () => {
                 <div className="about-grid">
                     {/* Content */}
                     <div className="about-content">
-                        <p className="section-subtitle">{about.subtitle}</p>
+                        {about.subtitle && <p className="section-subtitle">{about.subtitle}</p>}
                         <h2 className="section-title font-heading">
-                            {about.title[0]}
-                            <br />
-                            {about.title[1]}
+                            {title0}
+                            {title1 && (
+                                <>
+                                    <br />
+                                    {title1}
+                                </>
+                            )}
                         </h2>
 
                         <div className="about-description">
-                            {about.description.map((para, index) => (
+                            {descriptions.map((para, index) => (
                                 <p key={index}>{para}</p>
                             ))}
                         </div>
 
                         {/* Stats */}
-                        <div className="about-stats">
-                            {about.stats.map((stat, index) => (
-                                <div key={index} className="about-stat">
-                                    <p className="about-stat-value font-heading">{stat.value}</p>
-                                    <p className="about-stat-label">{stat.label}</p>
-                                </div>
-                            ))}
-                        </div>
+                        {stats.length > 0 && (
+                            <div className="about-stats">
+                                {stats.map((stat, index) => (
+                                    <div key={index} className="about-stat">
+                                        <p className="about-stat-value font-heading">{stat.value}</p>
+                                        <p className="about-stat-label">{stat.label}</p>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
                     </div>
 
                     {/* Image */}
                     <div className="about-image-wrapper">
-                        <img 
-                            src={about.image} 
-                            alt="Chef preparing food" 
+                        <img
+                            src={about.image}
+                            alt="Chef preparing food"
                             className="about-image"
                         />
-                        
+
                         {/* Hours Badge */}
                         <div className="about-hours-badge">
                             <p className="about-hours-title font-heading">{about.hours.title}</p>
@@ -163,7 +188,7 @@ const AboutSection = () => {
                     bottom: -1rem;
                     left: var(--spacing-md);
                     background-color: var(--color-primary);
-                    color: var(--color-bg-primary);
+                    color: var(--color-button-text); /* Changed */
                     padding: var(--spacing-md) var(--spacing-lg);
                 }
 
