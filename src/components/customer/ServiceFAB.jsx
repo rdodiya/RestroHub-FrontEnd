@@ -437,7 +437,6 @@ const styles = {
     zIndex: 1100,
     boxShadow: '0 10px 35px rgba(0, 0, 0, 0.4)',
     animation: 'toastSlide 0.4s cubic-bezier(0.34, 1.56, 0.64, 1)',
-    maxWidth: '90vw',
     textAlign: 'center',
     display: 'flex',
     alignItems: 'center',
