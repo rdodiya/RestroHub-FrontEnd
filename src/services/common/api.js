@@ -1,32 +1,47 @@
-import axios from "axios";
-import { redirect } from "react-router-dom";
+import axios from 'axios';
+import { clearAuthSession, getAccessToken } from './authStorage';
+import { spamHeaders, isGuardedRequest, consumeTurnstileToken } from '../../utils/spamState';
 
 const api = axios.create({
-  baseURL: import.meta.env.API_BASE_URL || "http://localhost:8181/restroly",
+  baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:8181/restroly',
 });
 
 // Add interceptor
 api.interceptors.request.use(
   (config) => {
-    const accessToken = localStorage.getItem("accessToken");
+    const accessToken = getAccessToken();
     // Add token only for secure APIs
-    if (accessToken && config.url.includes("/secure/")) {
+    if (accessToken) {
       config.headers.Authorization = `Bearer ${accessToken}`;
     }
     if (config.data instanceof FormData) {
       delete config.headers['Content-Type'];
+    }
+    if (isGuardedRequest(config)) {
+      Object.assign(
+        config.headers,
+        spamHeaders(import.meta.env.VITE_SPAM_PROTECTION_MODE || 'honeypot')
+      );
     }
     return config;
   },
   (error) => Promise.reject(error)
 );
 
+const SPAM_MODE = import.meta.env.VITE_SPAM_PROTECTION_MODE || 'honeypot';
+
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    if (isGuardedRequest(response.config)) consumeTurnstileToken(SPAM_MODE, window);
+    return response;
+  },
   (error) => {
-    if (error.response?.status === 401 || error.response?.status === 403) {
-      localStorage.removeItem("accessToken");
-      window.location.href = "/login";
+    if (isGuardedRequest(error.config)) consumeTurnstileToken(SPAM_MODE, window);
+    if (error.response?.status === 401) {
+      if (!error.config?.url?.includes('/public/')) {
+        clearAuthSession();
+        window.location.href = '/login';
+      }
     }
 
     return Promise.reject(error);

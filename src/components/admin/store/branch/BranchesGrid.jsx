@@ -1,105 +1,92 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, forwardRef, useImperativeHandle } from 'react';
 import { RefreshCw, AlertCircle, Building2 } from 'lucide-react';
+import api from '@services/common/api';
 import BranchCard from './BranchCard';
-
-// ============================================
-// SKELETON - TailAdmin card skeleton
-// ============================================
-const BranchSkeleton = () => (
-  <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white">
-    {/* Header skeleton */}
-    <div className="border-b border-gray-100 px-4 py-4 sm:px-6 sm:py-5 animate-pulse">
-      <div className="flex items-start gap-3">
-        <div className="h-10 w-10 shrink-0 rounded-xl bg-gray-100 sm:h-12 sm:w-12" />
-        <div className="flex-1">
-          <div className="h-5 w-32 rounded bg-gray-100 mb-2" />
-          <div className="h-4 w-16 rounded-full bg-gray-100" />
-        </div>
-      </div>
-    </div>
-    {/* Body skeleton */}
-    <div className="px-4 py-4 sm:px-6 sm:py-5 animate-pulse">
-      <div className="space-y-3">
-        {[1, 2, 3, 4].map((i) => (
-          <div key={i} className="flex items-center gap-3">
-            <div className="h-4 w-4 rounded bg-gray-100" />
-            <div className="h-4 w-44 rounded bg-gray-100" />
-          </div>
-        ))}
-      </div>
-    </div>
-    {/* Footer skeleton */}
-    <div className="border-t border-gray-100 px-4 py-3 sm:px-6 sm:py-4 animate-pulse">
-      <div className="flex items-center gap-2">
-        <div className="h-10 flex-1 rounded-lg bg-gray-100" />
-        <div className="h-10 w-10 rounded-lg bg-gray-100" />
-        <div className="h-10 w-10 rounded-lg bg-gray-100" />
-      </div>
-    </div>
-  </div>
-);
+import AdminSkeleton from '../../AdminSkeleton';
+import toast from 'react-hot-toast';
 
 // ============================================
 // MAIN
 // ============================================
-const BranchesGrid = ({ onEdit, onCountChange }) => {
+const BranchesGrid = forwardRef(({ onEdit, onCountChange, restaurantId }, ref) => {
   const [branches, setBranches] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  const fallbackBranches = [
-    {
-      id: 1, name: 'Main Branch', address: 'Kalawad Road, Rajkot, Gujarat',
-      phone: '9876543210', tables: 12, timing: '10:00 AM - 11:00 PM', isActive: true,
-    },
-    {
-      id: 2, name: 'City Center', address: '150 Feet Ring Road, Rajkot',
-      phone: '9876543211', tables: 20, timing: '11:00 AM - 10:00 PM', isActive: true,
-    },
-    {
-      id: 3, name: 'Airport Road', address: 'Near Airport, Rajkot',
-      phone: '9876543212', tables: 8, timing: '9:00 AM - 9:00 PM', isActive: false,
-    },
-  ];
-
   useEffect(() => {
     fetchBranches();
-  }, []);
+  }, [restaurantId]);
+
+  // Expose refresh method to parent via ref
+  useImperativeHandle(ref, () => ({
+    refreshBranches: fetchBranches,
+  }));
 
   const fetchBranches = async () => {
     try {
       setLoading(true);
       setError(null);
-      // 🔌 const response = await api.get('/api/branches');
-      // setBranches(response.data);
-      await new Promise((r) => setTimeout(r, 600));
-      setBranches(fallbackBranches);
-      onCountChange?.(fallbackBranches.length);
+
+      let response;
+      if (restaurantId) {
+        response = await api.get(`/secure/api/v1/branches/restaurant/${restaurantId}`, {
+          params: { page: 0, size: 50, sortBy: 'name', sortDirection: 'asc' }
+        });
+      } else {
+        response = await api.get('/secure/api/v1/branches', {
+          params: { page: 0, size: 50, sortBy: 'name', sortDirection: 'asc' }
+        });
+      }
+
+      const branchList = response.data?.content || response.data || [];
+      setBranches(branchList);
+      onCountChange?.(branchList.length);
     } catch (err) {
       console.error('Fetch failed:', err);
+      toast.error('Fetch failed');
       setError('Failed to load branches');
-      setBranches(fallbackBranches);
+      setBranches([]);
+      onCountChange?.(0);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleToggle = (id) => {
-    setBranches((prev) =>
-      prev.map((b) => (b.id === id ? { ...b, isActive: !b.isActive } : b))
-    );
+  // Soft delete
+  const handleDelete = async (branchId) => {
+    if (!window.confirm('Are you sure you want to delete this branch?')) return;
+
+    try {
+      await api.delete(`/secure/api/v1/branches/${branchId}`);
+      // Remove from local state
+      setBranches((prev) => prev.filter((b) => b.branchId !== branchId));
+      onCountChange?.((prev) => prev - 1);
+    } catch (err) {
+      console.error('Delete failed:', err);
+      toast.error(
+        err.response?.data?.message || 'Failed to delete branch'  // Fallback message
+      )
+    }
   };
 
-  const handleDelete = (id) => {
-    if (!window.confirm('Delete this branch?')) return;
-    setBranches((prev) => prev.filter((b) => b.id !== id));
+  // Restore
+  const handleRestore = async (branchId) => {
+    try {
+      await api.patch(`/secure/api/v1/branches/${branchId}/restore`);
+      fetchBranches();
+    } catch (err) {
+      console.error('Restore failed:', err);
+      toast.error(
+        err.response?.data?.message || 'Failed to restore branch'  // Fallback message
+      );
+    }
   };
 
   // LOADING
   if (loading) {
     return (
       <div className="grid grid-cols-1 gap-4 sm:gap-6 md:grid-cols-2 xl:grid-cols-3">
-        {[1, 2, 3].map((i) => <BranchSkeleton key={i} />)}
+        {[1, 2, 3].map((i) => <AdminSkeleton key={i} variant="branch" />)}
       </div>
     );
   }
@@ -112,11 +99,10 @@ const BranchesGrid = ({ onEdit, onCountChange }) => {
         <p className="text-sm font-medium text-red-600 sm:text-base">{error}</p>
         <button
           onClick={fetchBranches}
-          className="
-            mt-4 inline-flex items-center gap-2 rounded-lg
-            bg-blue-50 px-4 py-2 text-sm font-medium text-blue-700
-            hover:bg-blue-100 transition-colors
-          "
+          className="mt-4 inline-flex items-center gap-2 rounded-xl
+                     bg-gradient-to-r from-blue-600 to-indigo-600
+                     px-4 py-2 text-sm font-medium text-white
+                     hover:from-blue-700 hover:to-indigo-700 transition-all"
         >
           <RefreshCw className="h-4 w-4" />
           Try Again
@@ -143,15 +129,17 @@ const BranchesGrid = ({ onEdit, onCountChange }) => {
     <div className="grid grid-cols-1 gap-4 sm:gap-6 md:grid-cols-2 xl:grid-cols-3">
       {branches.map((branch) => (
         <BranchCard
-          key={branch.id}
+          key={branch.branchId}
           branch={branch}
-          onToggleStatus={handleToggle}
           onEdit={onEdit}
           onDelete={handleDelete}
+          onRestore={handleRestore}
         />
       ))}
     </div>
   );
-};
+});
+
+BranchesGrid.displayName = 'BranchesGrid';
 
 export default BranchesGrid;

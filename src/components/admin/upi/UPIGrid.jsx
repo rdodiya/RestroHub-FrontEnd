@@ -1,119 +1,112 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { RefreshCw, AlertCircle, CreditCard } from 'lucide-react';
 import UPICard from './UPICard';
+import AdminSkeleton from '../AdminSkeleton';
+import api from '@services/common/api';
+import toast from 'react-hot-toast';
+
+// Helper to safely extract list from response
+const extractList = (resData) => {
+  if (!resData) return [];
+  if (Array.isArray(resData)) return resData;
+  if (Array.isArray(resData.data)) return resData.data;
+  if (Array.isArray(resData.content)) return resData.content;
+  return [];
+};
 
 // ============================================
-// SKELETON
+// MAIN COMPONENT
 // ============================================
-const UPISkeleton = () => (
-  <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white animate-pulse">
-    {/* Header */}
-    <div className="border-b border-gray-100 px-4 py-4 sm:px-6 sm:py-5">
-      <div className="flex items-start gap-3">
-        <div className="h-10 w-10 shrink-0 rounded-xl bg-gray-100 sm:h-12 sm:w-12" />
-        <div className="flex-1">
-          <div className="mb-2 h-5 w-32 rounded bg-gray-100" />
-          <div className="h-4 w-40 rounded bg-gray-100" />
-        </div>
-        <div className="h-9 w-9 rounded-lg bg-gray-100" />
-      </div>
-    </div>
-    {/* Body */}
-    <div className="px-4 py-4 sm:px-6 sm:py-5">
-      <div className="grid grid-cols-2 gap-3">
-        <div className="h-20 rounded-xl bg-gray-100" />
-        <div className="h-20 rounded-xl bg-gray-100" />
-      </div>
-    </div>
-    {/* Footer */}
-    <div className="border-t border-gray-100 px-4 py-3 sm:px-6 sm:py-4">
-      <div className="flex gap-2">
-        <div className="h-10 flex-1 rounded-lg bg-gray-100" />
-        <div className="h-10 flex-1 rounded-lg bg-gray-100" />
-        <div className="h-10 w-10 rounded-lg bg-gray-100" />
-      </div>
-    </div>
-  </div>
-);
-
-// ============================================
-// MAIN
-// ============================================
-const UPIGrid = ({ onTest, onCountChange }) => {
+const UPIGrid = ({ branchId, refreshKey, onTest, onCountChange }) => {
   const [upiLinks, setUpiLinks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [copiedId, setCopiedId] = useState(null);
 
-  // Fallback
-  const fallbackLinks = [
-    {
-      id: 1, name: 'Main Account', upiId: 'restaurant@paytm',
-      isDefault: true, transactions: 89, revenue: 45230,
-    },
-    {
-      id: 2, name: 'Backup Account', upiId: 'restaurant@upi',
-      isDefault: false, transactions: 12, revenue: 5670,
-    },
-  ];
+  const fetchLinks = useCallback(async () => {
+    if (!branchId) {
+      setLoading(false);
+      return;
+    }
 
-  useEffect(() => {
-    fetchLinks();
-  }, []);
-
-  const fetchLinks = async () => {
     try {
       setLoading(true);
       setError(null);
-      // 🔌 const response = await api.get('/api/upi-links');
-      // setUpiLinks(response.data);
-      await new Promise((r) => setTimeout(r, 600));
-      setUpiLinks(fallbackLinks);
-      onCountChange?.(fallbackLinks.length);
+      const response = await api.get(`/secure/api/v1/upi-links/branch/${branchId}`);
+      const list = extractList(response.data);
+      setUpiLinks(list);
+      onCountChange?.(list.length);
     } catch (err) {
-      console.error('Fetch failed:', err);
-      setError('Failed to load UPI links');
-      setUpiLinks(fallbackLinks);
+      console.error('Failed to fetch UPI links:', err.response?.data || err);
+      toast.error('Failed to load UPI links');
+      setError('Failed to load UPI links from server');
+      setUpiLinks([]);
+      onCountChange?.(0);
     } finally {
       setLoading(false);
     }
-  };
+  }, [branchId, onCountChange]);
+
+  useEffect(() => {
+    fetchLinks();
+  }, [fetchLinks, refreshKey]);
 
   // ------------------------------------
   // HANDLERS
   // ------------------------------------
   const handleCopy = (upiId, id) => {
+    if (!upiId) return;
     navigator.clipboard.writeText(upiId);
     setCopiedId(id);
     setTimeout(() => setCopiedId(null), 2000);
   };
 
-  const handleSetDefault = (id) => {
-    setUpiLinks((prev) =>
-      prev.map((link) => ({ ...link, isDefault: link.id === id }))
-    );
+  const handleSetDefault = async (id) => {
+    try {
+      const res = await api.put(`/secure/api/v1/upi-links/${id}/default`, null, {
+        params: { branchId }
+      });
+      const updated = res.data?.data || res.data;
+      setUpiLinks((prev) =>
+        prev.map((link) => ({
+          ...link,
+          isDefault: link.id === id
+        }))
+      );
+      return updated;
+    } catch (err) {
+      console.error('Failed to set default UPI link:', err.response?.data || err);
+      throw err;
+    }
   };
 
-  const handleDelete = (id) => {
-    setUpiLinks((prev) => prev.filter((link) => link.id !== id));
+  const handleDelete = async (id) => {
+    try {
+      await api.delete(`/secure/api/v1/upi-links/${id}`);
+      setUpiLinks((prev) => {
+        const next = prev.filter((link) => link.id !== id);
+        onCountChange?.(next.length);
+        return next;
+      });
+    } catch (err) {
+      console.error('Failed to delete UPI link:', err.response?.data || err);
+      throw err;
+    }
   };
 
   // ------------------------------------
   // RENDER
   // ------------------------------------
-
-  // Loading
   if (loading) {
     return (
       <div className="grid grid-cols-1 gap-4 sm:gap-6 md:grid-cols-2">
         {[1, 2].map((i) => (
-          <UPISkeleton key={i} />
+          <AdminSkeleton key={i} variant="upi" />
         ))}
       </div>
     );
   }
 
-  // Error
   if (error && upiLinks.length === 0) {
     return (
       <div className="rounded-2xl border border-gray-200 bg-white px-6 py-12 text-center sm:py-16">
@@ -134,20 +127,18 @@ const UPIGrid = ({ onTest, onCountChange }) => {
     );
   }
 
-  // Empty
   if (upiLinks.length === 0) {
     return (
       <div className="rounded-2xl border border-gray-200 bg-white px-6 py-12 text-center sm:py-16">
         <CreditCard className="mx-auto mb-4 h-12 w-12 text-blue-200 sm:h-16 sm:w-16" />
         <p className="font-medium text-gray-700">No UPI links yet</p>
         <p className="mt-1 text-sm text-gray-500">
-          Add your first UPI link to accept payments
+          Add your primary UPI handle (GPay, PhonePe, Paytm, BHIM) to receive direct customer payments.
         </p>
       </div>
     );
   }
 
-  // Grid
   return (
     <div className="grid grid-cols-1 gap-4 sm:gap-6 md:grid-cols-2">
       {upiLinks.map((link) => (
