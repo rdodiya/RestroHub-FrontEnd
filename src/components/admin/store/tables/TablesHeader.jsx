@@ -1,18 +1,19 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Plus, ArrowLeft, Download, Loader2, LayoutGrid } from 'lucide-react';
+import toast from 'react-hot-toast';
 
-const TablesHeader = ({ branchId, onAddTable, totalTables = 0 }) => {
+const TablesHeader = ({ branchId, onAddTable, onGenerateCounterQR, totalTables = 0 }) => {
   const [downloading, setDownloading] = useState(false);
 
   const handleDownload = async () => {
     try {
       setDownloading(true);
-      // 🔌 API call
-      await new Promise((r) => setTimeout(r, 500));
-      console.log('Download all QRs');
+      // ponytail: no backend endpoint for bulk QR download yet; say so instead of faking success.
+      toast('Downloading all QR codes is not available yet');
     } catch (err) {
       console.error('Download failed:', err);
+      toast.error('Download failed');
     } finally {
       setDownloading(false);
     }
@@ -36,9 +37,7 @@ const TablesHeader = ({ branchId, onAddTable, totalTables = 0 }) => {
         <div>
           <div className="flex items-center gap-2">
             <LayoutGrid className="h-5 w-5 text-blue-600 hidden sm:block" />
-            <h2 className="text-lg font-bold text-gray-900 sm:text-2xl">
-              Tables
-            </h2>
+            <h2 className="text-lg font-bold text-gray-900 sm:text-2xl">Tables</h2>
             <span className="rounded bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600">
               Branch #{branchId}
             </span>
@@ -48,9 +47,7 @@ const TablesHeader = ({ branchId, onAddTable, totalTables = 0 }) => {
               </span>
             )}
           </div>
-          <p className="mt-0.5 text-sm text-gray-500">
-            Manage tables and QR codes
-          </p>
+          <p className="mt-0.5 text-sm text-gray-500">Manage tables and QR codes</p>
         </div>
       </div>
 
@@ -73,6 +70,17 @@ const TablesHeader = ({ branchId, onAddTable, totalTables = 0 }) => {
             <Download className="h-4 w-4" />
           )}
           <span className="hidden sm:inline">Download</span> QRs
+        </button>
+        <button
+          onClick={onGenerateCounterQR}
+          className="
+            inline-flex items-center gap-2 rounded-lg
+            border border-gray-200 bg-white px-3 py-2 sm:px-4 sm:py-2.5
+            text-sm font-medium text-gray-700
+            hover:bg-gray-50 transition-colors
+          "
+        >
+          Counter QR
         </button>
         <button
           onClick={onAddTable}

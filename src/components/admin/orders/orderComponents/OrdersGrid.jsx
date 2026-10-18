@@ -1,11 +1,10 @@
 import { useState, useEffect } from 'react';
 import { RefreshCw, AlertCircle, ClipboardList } from 'lucide-react';
 import OrderCard from './OrderCard';
-import api from "@services/common/api";
+import api from '@services/common/api';
+import AdminSkeleton from '../../AdminSkeleton';
+import toast from 'react-hot-toast';
 
-// ============================================
-// SKELETON (Private)
-// ============================================
 const OrderCardSkeleton = () => (
   <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 animate-pulse">
     <div className="flex items-start justify-between mb-4">
@@ -48,91 +47,51 @@ const OrderCardSkeleton = () => (
 // ============================================
 // MAIN COMPONENT
 // ============================================
-const OrdersGrid = ({ activeFilter, searchQuery }) => {
+const OrdersGrid = ({
+  activeFilter,
+  searchQuery,
+  onOrdersChange,
+  refreshTrigger,
+  branchId: activeBranchId,
+}) => {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [branchId, setBranchId] = useState(null);
+
+  // Sync orders up to parent so OrderFilters gets real counts
+  const syncOrders = (updated) => {
+    setOrders(updated);
+    onOrdersChange?.(updated);
+  };
 
   // ------------------------------------
-  // FALLBACK DATA
-  // ------------------------------------
-  const fallbackOrders = [
-    {
-      id: 123,
-      table: 4,
-      amount: 450,
-      status: 'cooking',
-      customer: 'John Doe',
-      phone: '9876543210',
-      items: [
-        { name: 'Paneer Tikka', qty: 2, price: 180 },
-        { name: 'Lassi', qty: 1, price: 90 },
-      ],
-      time: '5 mins ago',
-    },
-    {
-      id: 124,
-      table: 7,
-      amount: 320,
-      status: 'ready',
-      customer: 'Priya Sharma',
-      phone: '9876543211',
-      items: [
-        { name: 'Biryani', qty: 1, price: 220 },
-        { name: 'Roti', qty: 2, price: 50 },
-      ],
-      time: '12 mins ago',
-    },
-    {
-      id: 125,
-      table: 2,
-      amount: 780,
-      status: 'pending',
-      customer: 'Amit Kumar',
-      phone: '9876543212',
-      items: [{ name: 'Special Thali', qty: 3, price: 260 }],
-      time: '2 mins ago',
-    },
-    {
-      id: 126,
-      table: 9,
-      amount: 190,
-      status: 'billed',
-      customer: 'Sara Khan',
-      phone: '9876543213',
-      items: [{ name: 'Sweet Lassi', qty: 2, price: 95 }],
-      time: '25 mins ago',
-    },
-  ];
-
-  // ------------------------------------
-  // FETCH
+  // FETCH ORDERS WITH BRANCH ID FROM AUTH
   // ------------------------------------
   useEffect(() => {
-    fetchOrders();
+    fetchBranchIdAndOrders();
+    // live refresh comes from useOrderStream (bumps refreshTrigger) in Orders.jsx
+  }, [refreshTrigger, activeBranchId]);
 
-    // 🔌 UNCOMMENT: Auto-refresh every 30 seconds
-    // const interval = setInterval(fetchOrders, 30000);
-    // return () => clearInterval(interval);
-  }, []);
-
-  const fetchOrders = async () => {
+  const fetchBranchIdAndOrders = async () => {
     try {
-      if (!loading) setRefreshing(true);
-      setError(null);
+      if (loading) setRefreshing(true);
+      else setError(null);
 
-      // 🔌 UNCOMMENT WHEN API READY
-      // const response = await api.get('/api/orders');
-      // setOrders(response.data);
+      const branchData = { branchId: activeBranchId };
+      setBranchId(activeBranchId || null);
 
-      // 🎭 MOCK
-      await new Promise((resolve) => setTimeout(resolve, 700));
-      setOrders(fallbackOrders);
+      if (!activeBranchId) return; // branch context still loading
+
+      const response = await api.get(`/secure/api/v1/orders/branch/${branchData.branchId}/active`);
+      const data = Array.isArray(response.data) ? response.data : [];
+      syncOrders(data);
     } catch (err) {
       console.error('Failed to fetch orders:', err);
+      toast.error('Failed to fetch orders');
       setError('Failed to load orders');
-      setOrders(fallbackOrders);
+      syncOrders([]);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -140,30 +99,31 @@ const OrdersGrid = ({ activeFilter, searchQuery }) => {
   };
 
   // ------------------------------------
-  // HANDLERS
+  // HANDLER
   // ------------------------------------
   const handleStatusUpdate = (orderId, newStatus) => {
-    if (newStatus === 'complete') {
-      setOrders((prev) => prev.filter((o) => o.id !== orderId));
+    if (newStatus === 'COMPLETED' || newStatus === 'CANCELLED') {
+      syncOrders(orders.filter((o) => o.orderId !== orderId));
     } else {
-      setOrders((prev) =>
-        prev.map((o) => (o.id === orderId ? { ...o, status: newStatus } : o))
-      );
+      syncOrders(orders.map((o) => (o.orderId === orderId ? { ...o, status: newStatus } : o)));
     }
   };
 
-  // ------------------------------------
-  // FILTER + SEARCH
-  // ------------------------------------
+  const query = searchQuery.trim().toLowerCase();
+
   const filteredOrders = orders
     .filter((o) => activeFilter === 'all' || o.status === activeFilter)
-    .filter(
-      (o) =>
-        !searchQuery ||
-        o.id.toString().includes(searchQuery) ||
-        o.customer.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        o.table.toString().includes(searchQuery)
-    );
+    .filter((o) => {
+      if (!query) return true;
+      return (
+        String(o.orderId).includes(query) ||
+        (o.customerName || '').toLowerCase().includes(query) ||
+        String(o.tableNumber).includes(query) ||
+        (o.status || '').toLowerCase().includes(query) ||
+        (o.customerPhone || '').includes(query) ||
+        (o.items || []).some((item) => (item.foodName || '').toLowerCase().includes(query))
+      );
+    });
 
   // ------------------------------------
   // RENDER
@@ -172,7 +132,7 @@ const OrdersGrid = ({ activeFilter, searchQuery }) => {
     return (
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
         {[1, 2, 3, 4, 5, 6].map((i) => (
-          <OrderCardSkeleton key={i} />
+          <AdminSkeleton key={i} variant="order-card" />
         ))}
       </div>
     );
@@ -184,7 +144,7 @@ const OrdersGrid = ({ activeFilter, searchQuery }) => {
         <AlertCircle className="w-16 h-16 text-red-300 mx-auto mb-4" />
         <p className="text-red-600 font-medium mb-2">{error}</p>
         <button
-          onClick={fetchOrders}
+          onClick={fetchBranchIdAndOrders}
           className="flex items-center gap-2 mx-auto px-4 py-2 text-sm text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-xl transition-colors font-medium"
         >
           <RefreshCw className="w-4 h-4" />
@@ -223,11 +183,7 @@ const OrdersGrid = ({ activeFilter, searchQuery }) => {
       {/* Orders Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
         {filteredOrders.map((order) => (
-          <OrderCard
-            key={order.id}
-            order={order}
-            onStatusUpdate={handleStatusUpdate}
-          />
+          <OrderCard key={order.orderId} order={order} onStatusUpdate={handleStatusUpdate} />
         ))}
       </div>
 

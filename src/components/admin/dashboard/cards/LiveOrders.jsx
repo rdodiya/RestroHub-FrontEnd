@@ -3,143 +3,140 @@ import {
   Clock,
   ChefHat,
   CheckCircle2,
+  Receipt,
+  XCircle,
   RefreshCw,
   AlertCircle
 } from 'lucide-react';
 import api from "@services/common/api";
+import AdminSkeleton from '../../AdminSkeleton';
+import { useAdminTheme } from '@context/AdminThemeContext';
+import OrderCard from '../../orders/orderComponents/OrderCard';
+import toast from 'react-hot-toast';
 
-// ============================================
-// STATUS BADGE (Private to this file)
-// ============================================
+// Format ISO createdAt into readable time ago string
+const formatTimeAgo = (iso) => {
+  if (!iso) return '';
+  const now = new Date().getTime() / 1000;
+  const created = new Date(iso).getTime() / 1000;
+  const diff = now - created;
+  if (diff < 60) return 'just now';
+  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+  return `${Math.floor(diff / 86400)}d ago`;
+};
+
+// Status badge config matching backend OrderStatus enum
 const StatusBadge = ({ status }) => {
+  const { isDark } = useAdminTheme();
   const config = {
-    pending: { bg: 'bg-yellow-100', text: 'text-yellow-700', icon: Clock, label: 'Pending' },
-    cooking: { bg: 'bg-blue-100', text: 'text-blue-700', icon: ChefHat, label: 'Cooking' },
-    ready: { bg: 'bg-green-100', text: 'text-green-700', icon: CheckCircle2, label: 'Ready' },
+    PENDING:   { bg: isDark ? 'bg-yellow-900/40' : 'bg-yellow-100', text: isDark ? 'text-yellow-400' : 'text-yellow-700', icon: Clock, label: 'Pending' },
+    CONFIRMED: { bg: isDark ? 'bg-indigo-900/40' : 'bg-indigo-100', text: isDark ? 'text-indigo-400' : 'text-indigo-700', icon: CheckCircle2, label: 'Confirmed' },
+    PREPARING: { bg: isDark ? 'bg-blue-900/40'   : 'bg-blue-100',   text: isDark ? 'text-blue-400'   : 'text-blue-700',   icon: ChefHat, label: 'Preparing' },
+    READY:     { bg: isDark ? 'bg-green-900/40'  : 'bg-green-100',  text: isDark ? 'text-green-400'  : 'text-green-700',  icon: CheckCircle2, label: 'Ready' },
+    BILLED:    { bg: isDark ? 'bg-purple-900/40' : 'bg-purple-100', text: isDark ? 'text-purple-400' : 'text-purple-700', icon: Receipt, label: 'Billed' },
+    CANCELLED: { bg: isDark ? 'bg-red-900/40'    : 'bg-red-100',    text: isDark ? 'text-red-400'    : 'text-red-700',    icon: XCircle, label: 'Cancelled' },
   };
 
-  const { bg, text, icon: Icon, label } = config[status] || config.pending;
+  const { bg, text, icon: Icon, label: lbl } = config[status] || config.PENDING;
 
   return (
     <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${bg} ${text}`}>
       <Icon className="w-3 h-3" />
-      {label}
+      {lbl}
     </span>
   );
 };
 
-// ============================================
-// ORDER CARD (Private to this file)
-// ============================================
-const OrderCard = ({ order }) => (
-  <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors">
-    <div className="flex items-center gap-4">
-      <div className="w-12 h-12 bg-orange-100 rounded-xl flex items-center justify-center">
-        <span className="font-bold text-orange-600">#{order.id}</span>
-      </div>
-      <div>
-        <div className="flex items-center gap-2">
-          <span className="font-semibold text-gray-800">Table {order.table}</span>
-          <StatusBadge status={order.status} />
-        </div>
-        <p className="text-sm text-gray-500 mt-1">{order.items}</p>
-      </div>
-    </div>
-    <p className="font-bold text-gray-800">₹{order.amount}</p>
-  </div>
-);
-
-// ============================================
-// SKELETON (Private to this file)
-// ============================================
-const OrderSkeleton = () => (
-  <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl animate-pulse">
-    <div className="flex items-center gap-4">
-      <div className="w-12 h-12 bg-gray-200 rounded-xl" />
-      <div>
-        <div className="w-32 h-4 bg-gray-200 rounded mb-2" />
-        <div className="w-48 h-3 bg-gray-200 rounded" />
-      </div>
-    </div>
-    <div className="w-16 h-5 bg-gray-200 rounded" />
-  </div>
-);
-
-// ============================================
-// MAIN COMPONENT (Exported)
-// ============================================
 const LiveOrders = () => {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
+  const { isDark } = useAdminTheme();
 
-  // ------------------------------------
-  // FALLBACK DATA
-  // ------------------------------------
-  const fallbackOrders = [
-    { id: 123, table: 4, amount: 450, status: 'cooking', items: '2x Paneer, 1x Lassi' },
-    { id: 124, table: 7, amount: 320, status: 'ready', items: '1x Biryani, 2x Roti' },
-    { id: 125, table: 2, amount: 780, status: 'cooking', items: '3x Thali' },
-    { id: 126, table: 9, amount: 190, status: 'pending', items: '2x Lassi' },
-  ];
-
-  // ------------------------------------
-  // FETCH DATA
-  // ------------------------------------
   useEffect(() => {
     fetchOrders();
+    const interval = setInterval(fetchOrders, 30000);
 
-    // 🔌 UNCOMMENT: Auto-refresh every 30 seconds
-    // const interval = setInterval(fetchOrders, 30000);
-    // return () => clearInterval(interval);
+    const handleOrdersUpdated = () => {
+      fetchOrders();
+    };
+    window.addEventListener('restrohub:order-updated', handleOrdersUpdated);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('restrohub:order-updated', handleOrdersUpdated);
+    };
   }, []);
 
   const fetchOrders = async () => {
     try {
-      if (!loading) setRefreshing(true);
+      setRefreshing(true);
       setError(null);
 
-      // 🔌 UNCOMMENT WHEN API READY
-      // const response = await api.get('/api/orders?status=active&limit=5');
-      // setOrders(response.data);
+      // Get branchId from authenticated user's restaurant context
+      const branchRes = await api.get('/secure/api/v1/users/fetchRestaurantId');
+      const branchData = branchRes.data || {};
+      const branchId = branchData.branchId;
 
-      // 🎭 MOCK
-      await new Promise(resolve => setTimeout(resolve, 600));
-      setOrders(fallbackOrders);
+      if (!branchId) {
+        setError('No branch found for current user');
+        setOrders([]);
+        return;
+      }
 
+      const response = await api.get(`/secure/api/v1/orders/branch/${branchId}/active`);
+      const data = Array.isArray(response.data) ? response.data : [];
+
+      // Transform backend OrderResponse to format expected by OrderCard
+      const transformed = data.map((order) => ({
+        orderId: order.orderId,
+        tableNumber: order.tableNumber,
+        totalAmount: order.totalAmount,
+        customerName: order.customerName,
+        customerPhone: order.customerPhone,
+        createdAt: order.createdAt,
+        status: order.status,
+        items: order.items?.map((item) => ({
+          foodName: item.foodName,
+          quantity: item.quantity,
+          subtotal: item.subtotal,
+          specialRequest: item.specialRequest
+        })) || []
+      }));
+
+      setOrders(transformed);
     } catch (err) {
-      console.error('Failed to fetch orders:', err);
+      console.error('Failed to fetch live orders:', err);
+      toast.error('Failed to fetch orders');
       setError('Failed to load orders');
-      setOrders(fallbackOrders);
+      setOrders([]);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
   };
 
-  // ------------------------------------
-  // RENDER
-  // ------------------------------------
   return (
-    <div className="lg:col-span-2 bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
+    <div className={`rounded-2xl p-6 shadow-sm border ${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}>
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">
-          <h2 className="text-lg font-semibold text-gray-800">Live Orders Feed</h2>
+          <h2 className={`text-lg font-semibold ${isDark ? 'text-gray-100' : 'text-gray-800'}`}>Live Orders Feed</h2>
           {refreshing && <RefreshCw className="w-4 h-4 text-gray-400 animate-spin" />}
         </div>
         <div className="flex items-center gap-3">
           <button
             onClick={fetchOrders}
             disabled={refreshing}
-            className="text-sm text-gray-400 hover:text-gray-600 transition-colors"
+            className={`text-sm transition-colors ${isDark ? 'text-gray-500 hover:text-gray-300' : 'text-gray-400 hover:text-gray-600'}`}
           >
             <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
           </button>
           <a
             href="/admin/orders"
-            className="text-sm text-orange-600 hover:text-orange-700 font-medium"
+            className="text-sm text-orange-500 hover:text-orange-400 font-medium"
           >
             View All →
           </a>
@@ -149,26 +146,29 @@ const LiveOrders = () => {
       {/* Content */}
       <div className="space-y-4">
         {loading ? (
-          // Skeleton Loading
-          [1, 2, 3, 4].map(i => <OrderSkeleton key={i} />)
+          [1, 2, 3, 4].map(i => (
+            <AdminSkeleton key={i} variant="order" />
+          ))
         ) : error && orders.length === 0 ? (
           // Error State
           <div className="text-center py-8">
             <AlertCircle className="w-12 h-12 text-red-300 mx-auto mb-3" />
-            <p className="text-red-600 mb-2">{error}</p>
-            <button onClick={fetchOrders} className="text-sm text-red-700 underline">
+            <p className="text-red-500 mb-2">{error}</p>
+            <button onClick={fetchOrders} className="text-sm text-red-400 underline">
               Try Again
             </button>
           </div>
         ) : orders.length === 0 ? (
-          // Empty State
           <div className="text-center py-8">
             <CheckCircle2 className="w-12 h-12 text-green-300 mx-auto mb-3" />
-            <p className="text-gray-500">No active orders right now</p>
+            <p className={`${isDark ? 'text-gray-400' : 'text-gray-500'}`}>No active orders right now</p>
           </div>
         ) : (
-          // Orders List
-          orders.map(order => <OrderCard key={order.id} order={order} />)
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3.5">
+            {orders.map((order) => (
+              <OrderCard key={order.orderId} order={order} compact={true} />
+            ))}
+          </div>
         )}
       </div>
     </div>

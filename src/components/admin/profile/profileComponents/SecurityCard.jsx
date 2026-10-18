@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import { Shield, Save, Loader2, Eye, EyeOff, AlertCircle, Check } from 'lucide-react';
+import profileService from '../../../../services/user/profileService';
+import toast from 'react-hot-toast';
 
 const SecurityCard = () => {
   const [saving, setSaving] = useState(false);
@@ -19,9 +21,12 @@ const SecurityCard = () => {
   const validate = () => {
     const errs = {};
     if (!formData.currentPassword) errs.currentPassword = 'Required';
-    if (formData.newPassword.length < 8) errs.newPassword = 'Min 8 characters';
-    if (formData.newPassword !== formData.confirmPassword)
+    if (!formData.newPassword || formData.newPassword.length < 8) {
+      errs.newPassword = 'Min 8 characters';
+    }
+    if (formData.newPassword !== formData.confirmPassword) {
       errs.confirmPassword = 'Passwords do not match';
+    }
     setErrors(errs);
     return Object.keys(errs).length === 0;
   };
@@ -32,13 +37,22 @@ const SecurityCard = () => {
     try {
       setSaving(true);
       setSuccess(false);
-      // 🔌 await api.put('/api/profile/password', formData);
-      await new Promise((r) => setTimeout(r, 1000));
+      setErrors({});
+
+      await profileService.changePassword({
+        currentPassword: formData.currentPassword,
+        newPassword: formData.newPassword,
+      });
+
       setSuccess(true);
+      toast.success('Password changed successfully!');
       setFormData({ currentPassword: '', newPassword: '', confirmPassword: '' });
-      setTimeout(() => setSuccess(false), 3000);
+      setTimeout(() => setSuccess(false), 4000);
     } catch (err) {
-      setErrors({ currentPassword: 'Current password is incorrect' });
+      console.error('Password update failed:', err.response?.data || err);
+      const msg = err.response?.data?.message || err.response?.data?.error || 'Current password is incorrect';
+      setErrors({ currentPassword: msg });
+      toast.error(msg);
     } finally {
       setSaving(false);
     }
@@ -65,6 +79,9 @@ const SecurityCard = () => {
           className={`${inputClass} ${error ? 'border-red-300' : 'border-gray-200'}`}
           placeholder="••••••••"
           required
+          aria-required="true"
+          aria-invalid={error ? 'true' : 'false'}
+          aria-describedby={error ? `err-${field}` : undefined}
         />
         <button
           type="button"
@@ -75,7 +92,7 @@ const SecurityCard = () => {
         </button>
       </div>
       {error && (
-        <p className="mt-1 flex items-center gap-1 text-xs text-red-600">
+        <p id={`err-${field}`} className="mt-1 flex items-center gap-1 text-xs text-red-600">
           <AlertCircle className="h-3 w-3" /> {error}
         </p>
       )}
